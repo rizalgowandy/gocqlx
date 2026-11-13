@@ -21,9 +21,11 @@ func checksum(b []byte) string {
 func fileChecksum(f fs.FS, path string) (string, error) {
 	file, err := f.Open(path)
 	if err != nil {
-		return "", nil
+		return "", err
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	h := md5.New()
 	if _, err := io.Copy(h, file); err != nil {

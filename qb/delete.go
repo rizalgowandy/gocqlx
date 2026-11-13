@@ -12,20 +12,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/scylladb/gocqlx/v2"
+	"github.com/scylladb/gocqlx/v3"
 )
 
 // DeleteBuilder builds CQL DELETE statements.
 type DeleteBuilder struct {
 	table   string
 	columns columns
-	using   using
 	where   where
 	_if     _if
+	using   using
 	exists  bool
 }
 
 // Delete returns a new DeleteBuilder with the given table name.
+// See the package documentation for table name quoting rules.
 func Delete(table string) *DeleteBuilder {
 	return &DeleteBuilder{
 		table: table,
@@ -42,7 +43,7 @@ func (b *DeleteBuilder) ToCql() (stmt string, names []string) {
 		cql.WriteByte(' ')
 	}
 	cql.WriteString("FROM ")
-	cql.WriteString(b.table)
+	cql.WriteString(quoteTableName(b.table))
 	cql.WriteByte(' ')
 
 	names = append(names, b.using.writeCql(&cql)...)
@@ -68,6 +69,7 @@ func (b *DeleteBuilder) QueryContext(ctx context.Context, session gocqlx.Session
 }
 
 // From sets the table to be deleted from.
+// See the package documentation for table name quoting rules.
 func (b *DeleteBuilder) From(table string) *DeleteBuilder {
 	b.table = table
 	return b

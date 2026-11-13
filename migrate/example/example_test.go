@@ -2,6 +2,7 @@
 // Use of this source code is governed by a ALv2-style
 // license that can be found in the LICENSE file.
 
+//go:build all || integration
 // +build all integration
 
 package example
@@ -10,14 +11,14 @@ import (
 	"context"
 	"testing"
 
-	"github.com/scylladb/gocqlx/v2"
-	"github.com/scylladb/gocqlx/v2/gocqlxtest"
-	"github.com/scylladb/gocqlx/v2/migrate"
-	"github.com/scylladb/gocqlx/v2/migrate/example/cql"
+	"github.com/scylladb/gocqlx/v3"
+	"github.com/scylladb/gocqlx/v3/gocqlxtest"
+	"github.com/scylladb/gocqlx/v3/migrate"
+	"github.com/scylladb/gocqlx/v3/migrate/example/cql"
 )
 
 // Running examples locally:
-// make run-scylla
+// make start-scylla
 // make run-examples
 func TestExample(t *testing.T) {
 	const ks = "migrate_example"
@@ -48,6 +49,12 @@ func TestExample(t *testing.T) {
 	reg.Add(migrate.CallComment, "2", log)
 	reg.Add(migrate.CallComment, "3", log)
 	migrate.Callback = reg.Callback
+
+	pending, err := migrate.Pending(context.Background(), session, cql.Files)
+	if err != nil {
+		t.Fatal("Pending:", err)
+	}
+	t.Log("Pending migrations:", len(pending))
 
 	// First run prints data
 	if err := migrate.FromFS(context.Background(), session, cql.Files); err != nil {

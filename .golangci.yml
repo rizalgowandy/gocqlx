@@ -1,44 +1,78 @@
-run:
-  deadline: 5m
-  tests: false
+version: "2"
 
-linters-settings:
-  errcheck:
-    check-blank: true
-  gocognit:
-    min-complexity: 50
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - performance
-      - style
-    disabled-checks:
-      - commentedOutCode
-      - evalOrder
-      - hugeParam
-      - importShadow
-      - yodaStyleExpr
-      - whyNoLint
-  lll:
-    line-length: 180
+formatters:
+  enable:
+    - goimports
+
+  settings:
+    goimports:
+      local-prefixes:
+        - github.com/scylladb/gocqlx
+    golines:
+      max-len: 120
+    gofumpt:
+      extra-rules: true
 
 linters:
-  enable-all: true
-  disable:
-    - funlen
-    - gas
-    - gochecknoglobals
-    - gochecknoinits
-    - gomnd
-    - interfacer
-    - maligned
-    - nakedret
-    - prealloc
-    - wsl
+  exclusions:
+    rules:
+      - path: '(.+)_test\.go'
+        text: "fieldalignment"
+        linters:
+          - govet
 
-issues:
-  exclude-use-default: false
-  exclude:
-    - composite literal uses unkeyed fields
-    - Error return value of `.+\.Close` is not checked
-    - method Json should be JSON
+  default: none
+  enable:
+    - nolintlint
+    - errcheck
+    - gocritic
+    - goheader
+    - govet
+    - ineffassign
+    - lll
+    - misspell
+    - predeclared
+    - revive
+    - staticcheck
+    - thelper
+    - tparallel
+    - unused
+    - forbidigo
+  settings:
+    revive:
+      rules:
+        - name: package-comments
+          disabled: true
+    govet:
+      enable-all: true
+      disable:
+        - shadow
+        # Keep modernization suggestions out of the compatibility check.
+        - inline
+    errcheck:
+      check-blank: false
+    gocognit:
+      min-complexity: 50
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+        - style
+      disabled-checks:
+        - commentedOutCode
+        - evalOrder
+        - hugeParam
+        - importShadow
+        - yodaStyleExpr
+        - whyNoLint
+    lll:
+      line-length: 180
+    nolintlint:
+      allow-no-explanation: [ golines ]
+      require-explanation: true
+      require-specific: true
+
+run:
+  build-tags:
+    - integration
+    - all

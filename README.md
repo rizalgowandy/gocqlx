@@ -1,7 +1,25 @@
-# 🚀 GocqlX [![GoDoc](https://pkg.go.dev/badge/github.com/scylladb/gocqlx/v2.svg)](https://pkg.go.dev/github.com/scylladb/gocqlx/v2) [![Go Report Card](https://goreportcard.com/badge/github.com/scylladb/gocqlx)](https://goreportcard.com/report/github.com/scylladb/gocqlx) [![Build Status](https://travis-ci.org/scylladb/gocqlx.svg?branch=master)](https://travis-ci.org/scylladb/gocqlx)
+# 🚀 GocqlX [![GoDoc](https://pkg.go.dev/badge/github.com/scylladb/gocqlx/v3.svg)](https://pkg.go.dev/github.com/scylladb/gocqlx/v3) [![Go Report Card](https://goreportcard.com/badge/github.com/scylladb/gocqlx)](https://goreportcard.com/report/github.com/scylladb/gocqlx) [![Build Status](https://travis-ci.org/scylladb/gocqlx.svg?branch=master)](https://travis-ci.org/scylladb/gocqlx)
 
 GocqlX makes working with Scylla easy and less error-prone.
 It’s inspired by [Sqlx](https://github.com/jmoiron/sqlx), a tool for working with SQL databases, but it goes beyond what Sqlx provides.
+
+## Compatibility
+
+Versions of GocqlX prior to v3.0.0 are compatible with both [Apache Cassandra’s gocql](https://github.com/apache/cassandra-gocql-driver) and [ScyllaDB’s fork](https://github.com/scylladb/gocql).
+However, starting with v3.0.0, GocqlX exclusively supports the scylladb/gocql driver.
+This version supports scylladb/gocql v1.20.0 or newer.
+The protocol v5 query and batch APIs are available in v1.19.0; v1.20.0 is the supported minimum by policy and the version used for testing.
+Add a replace directive to your application's `go.mod`:
+
+```go
+// Use the latest version of scylladb/gocql; check for updates at https://github.com/scylladb/gocql/releases
+replace github.com/gocql/gocql => github.com/scylladb/gocql v1.20.0
+```
+
+Replace directives in dependencies are not inherited.
+Update any older driver replacement in your application's `go.mod` before upgrading GocqlX.
+
+This is required because GocqlX relies on ScyllaDB-specific extensions and bug fixes introduced in the gocql fork. Attempting to use the standard gocql driver with GocqlX v3.0.0+ may lead to build or runtime issues.
 
 ## Features
 
@@ -17,24 +35,51 @@ Subpackages provide additional functionality:
 * CRUD operations based on table model ([package table](https://github.com/scylladb/gocqlx/blob/master/table))
 * Database migrations ([package migrate](https://github.com/scylladb/gocqlx/blob/master/migrate))
 
-## Installation
+## Installation GocqlX
+
+Add GocqlX to your Go module:
 
 ```bash
-    go get -u github.com/scylladb/gocqlx/v2
+go get github.com/scylladb/gocqlx/v3
+```
+
+## Installation schemagen
+
+Unfortunately you can't install it via `go install`, since `go.mod` contains `replace` directive.
+So, you have to check it out and install manually:
+```bash
+git clone git@github.com:scylladb/gocqlx.git
+cd gocqlx/cmd/schemagen/
+go install .
 ```
 
 ## Getting started
+
+First, import the required packages:
+
+```go
+import (
+	"fmt"
+	"log"
+
+	"github.com/gocql/gocql"
+	"github.com/scylladb/gocqlx/v3"
+	"github.com/scylladb/gocqlx/v3/qb"
+	"github.com/scylladb/gocqlx/v3/table"
+)
+```
 
 Wrap gocql Session:
 
 ```go
 // Create gocql cluster.
 cluster := gocql.NewCluster(hosts...)
-// Wrap session on creation, gocqlx session embeds gocql.Session pointer. 
+// Wrap session on creation, gocqlx session embeds gocql.Session pointer.
 session, err := gocqlx.WrapSession(cluster.CreateSession())
 if err != nil {
-	t.Fatal(err)
+	log.Fatal(err)
 }
+defer session.Close()
 ```
 
 Specify table model:
@@ -52,12 +97,14 @@ var personMetadata = table.Metadata{
 var personTable = table.New(personMetadata)
 
 // Person represents a row in person table.
-// Field names are converted to camel case by default, no need to add special tags.
-// If you want to disable a field add `db:"-"` tag, it will not be persisted.
+// Field names are converted to snake case by default, no need to add special tags.
+// A field will not be persisted by adding the `db:"-"` tag or making it unexported.
 type Person struct {
 	FirstName string
 	LastName  string
 	Email     []string
+	HairColor string `db:"-"`  // exported and skipped
+	eyeColor  string           // unexported also skipped
 }
 ```
 
@@ -68,10 +115,12 @@ p := Person{
 	"Michał",
 	"Matczuk",
 	[]string{"michal@scylladb.com"},
+	"red",    // not persisted
+	"hazel"   // not persisted
 }
 q := session.Query(personTable.Insert()).BindStruct(p)
 if err := q.ExecRelease(); err != nil {
-	t.Fatal(err)
+	log.Fatal(err)
 }
 ```
 
@@ -85,9 +134,9 @@ p := Person{
 }
 q := session.Query(personTable.Get()).BindStruct(p)
 if err := q.GetRelease(&p); err != nil {
-	t.Fatal(err)
+	log.Fatal(err)
 }
-t.Log(p)
+fmt.Println(p)
 // stdout: {Michał Matczuk [michal@scylladb.com]}
 ```
 
@@ -97,9 +146,9 @@ Load all rows in to a slice:
 var people []Person
 q := session.Query(personTable.Select()).BindMap(qb.M{"first_name": "Michał"})
 if err := q.SelectRelease(&people); err != nil {
-	t.Fatal(err)
+	log.Fatal(err)
 }
-t.Log(people)
+fmt.Println(people)
 // stdout: [{Michał Matczuk [michal@scylladb.com]}]
 ```
 
@@ -108,12 +157,12 @@ t.Log(people)
 Installation
 
 ```bash
-go get -u "github.com/scylladb/gocqlx/v2/cmd/schemagen"
+go get -u "github.com/scylladb/gocqlx/v3/cmd/schemagen"
 ```
 
 Usage:
 ```bash
-$GOBIN/schemagen [flags]
+schemagen [flags]
 
 Flags:
   -cluster string
@@ -130,7 +179,7 @@ Example:
 
 Running the following command for `examples` keyspace: 
 ```bash
-$GOBIN/schemagen -cluster="127.0.0.1:9042" -keyspace="examples" -output="models" -pkgname="models"
+schemagen -cluster="127.0.0.1:9042" -keyspace="examples" -output="models" -pkgname="models"
 ```
 
 Generates `models/models.go` as follows:
@@ -139,7 +188,7 @@ Generates `models/models.go` as follows:
 
 package models
 
-import "github.com/scylladb/gocqlx/v2/table"
+import "github.com/scylladb/gocqlx/v3/table"
 
 // Table models.
 var (
@@ -183,6 +232,7 @@ var (
 ## Examples
 
 You can find lots of examples in [example_test.go](https://github.com/scylladb/gocqlx/blob/master/example_test.go).
+There is also a runnable example app with its own `go.mod` in [examples/basic](examples/basic).
 
 Go and run them locally:
 
@@ -190,6 +240,10 @@ Go and run them locally:
 make run-scylla
 make run-examples
 ```
+
+## Training
+
+The course [Using Scylla Drivers](https://university.scylladb.com/courses/using-scylla-drivers) in Scylla University explains how to use drivers in different languages to interact with a Scylla cluster. The lesson, [Golang and Scylla Part 3 - GoCQLX](https://university.scylladb.com/courses/using-scylla-drivers/lessons/golang-and-scylla-part-3-gocqlx/), goes over a sample application that, using GoCQLX, interacts with a three-node Scylla cluster. It connects to a Scylla cluster, displays the contents of a table, inserts and deletes data, and shows the contents of the table after each action. [Scylla University](https://university.scylladb.com/) includes other training material and online courses which will help you become a Scylla NoSQL database expert.
 
 ## Performance
 

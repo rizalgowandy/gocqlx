@@ -6,8 +6,9 @@ package gocqlx_test
 
 import (
 	"github.com/gocql/gocql"
-	"github.com/scylladb/gocqlx/v2"
-	"github.com/scylladb/gocqlx/v2/qb"
+
+	"github.com/scylladb/gocqlx/v3"
+	"github.com/scylladb/gocqlx/v3/qb"
 )
 
 func ExampleSession() {
@@ -28,6 +29,8 @@ func ExampleUDT() {
 		FirstName string
 		LastName  string
 	}
+
+	_ = FullName{}
 }
 
 func ExampleUDT_wraper() {
@@ -41,4 +44,6 @@ func ExampleUDT_wraper() {
 		gocqlx.UDT
 		*FullName
 	}
+
+	_ = FullNameUDT{}
 }

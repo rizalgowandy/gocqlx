@@ -12,7 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/scylladb/gocqlx/v2"
+	"github.com/scylladb/gocqlx/v3"
 )
 
 // Order specifies sorting order.
@@ -34,21 +34,22 @@ func (o Order) String() string {
 
 // SelectBuilder builds CQL SELECT statements.
 type SelectBuilder struct {
+	limit             limit
+	limitPerPartition limit
 	table             string
-	columns           columns
-	distinct          columns
-	using             using
 	where             where
 	groupBy           columns
 	orderBy           columns
-	limit             limit
-	limitPerPartition limit
+	columns           columns
+	distinct          columns
+	using             using
 	allowFiltering    bool
 	bypassCache       bool
 	json              bool
 }
 
 // Select returns a new SelectBuilder with the given table name.
+// See the package documentation for table name quoting rules.
 func Select(table string) *SelectBuilder {
 	return &SelectBuilder{
 		table: table,
@@ -81,7 +82,7 @@ func (b *SelectBuilder) ToCql() (stmt string, names []string) {
 		b.columns.writeCql(&cql)
 	}
 	cql.WriteString(" FROM ")
-	cql.WriteString(b.table)
+	cql.WriteString(quoteTableName(b.table))
 	cql.WriteByte(' ')
 
 	names = append(names, b.where.writeCql(&cql)...)
@@ -126,6 +127,7 @@ func (b *SelectBuilder) QueryContext(ctx context.Context, session gocqlx.Session
 }
 
 // From sets the table to be selected from.
+// See the package documentation for table name quoting rules.
 func (b *SelectBuilder) From(table string) *SelectBuilder {
 	b.table = table
 	return b
@@ -172,6 +174,12 @@ func (b *SelectBuilder) Timeout(d time.Duration) *SelectBuilder {
 // parameter name.
 func (b *SelectBuilder) TimeoutNamed(name string) *SelectBuilder {
 	b.using.TimeoutNamed(name)
+	return b
+}
+
+// ServiceLevel adds a USING SERVICE LEVEL clause with the given name to the query
+func (b *SelectBuilder) ServiceLevel(name string) *SelectBuilder {
+	b.using.ServiceLevel(name)
 	return b
 }
 

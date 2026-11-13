@@ -86,6 +86,9 @@ func (q *Queryx) RoutingKey(routingKey []byte) *Queryx {
 // query, queries will be canceled and return once the context is
 // canceled.
 func (q *Queryx) WithContext(ctx context.Context) *Queryx {
+	if ctx == nil {
+		ctx = context.Background()
+	}
 	q.Query = q.Query.WithContext(ctx)
 	return q
 }
@@ -145,5 +148,19 @@ func (q *Queryx) PageState(state []byte) *Queryx {
 // https://github.com/gocql/gocql/issues/612
 func (q *Queryx) NoSkipMetadata() *Queryx {
 	q.Query.NoSkipMetadata()
+	return q
+}
+
+// SetKeyspace sets the keyspace in which the query executes.
+// Only available on protocol >= 5.
+func (q *Queryx) SetKeyspace(keyspace string) *Queryx {
+	q.Query.SetKeyspace(keyspace)
+	return q
+}
+
+// WithNowInSeconds sets the current time in seconds used by the server for the query.
+// Only available on protocol >= 5.
+func (q *Queryx) WithNowInSeconds(now int) *Queryx {
+	q.Query.WithNowInSeconds(now)
 	return q
 }

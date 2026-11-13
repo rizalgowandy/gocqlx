@@ -28,7 +28,7 @@ func TestUpdateBuilder(t *testing.T) {
 		// Change table name
 		{
 			B: Update("cycling.cyclist_name").Set("id", "user_uuid", "firstname").Where(w).Table("Foobar"),
-			S: "UPDATE Foobar SET id=?,user_uuid=?,firstname=? WHERE id=? ",
+			S: `UPDATE "Foobar" SET id=?,user_uuid=?,firstname=? WHERE id=? `,
 			N: []string{"id", "user_uuid", "firstname", "expr"},
 		},
 		// Add SET
@@ -42,6 +42,12 @@ func TestUpdateBuilder(t *testing.T) {
 			B: Update("cycling.cyclist_name").SetLit("user_uuid", "literal_uuid").Where(w).Set("stars"),
 			S: "UPDATE cycling.cyclist_name SET user_uuid=literal_uuid,stars=? WHERE id=? ",
 			N: []string{"stars", "expr"},
+		},
+		// Add SET string literal
+		{
+			B: Update("cycling.cyclist_name").SetLitString("firstname", "O'Brien").Where(w),
+			S: "UPDATE cycling.cyclist_name SET firstname='O''Brien' WHERE id=? ",
+			N: []string{"expr"},
 		},
 
 		// Add SET tuple
@@ -104,6 +110,12 @@ func TestUpdateBuilder(t *testing.T) {
 			S: "UPDATE cycling.cyclist_name SET id=?,user_uuid=?,firstname=? WHERE id=? IF firstname>? ",
 			N: []string{"id", "user_uuid", "firstname", "expr", "firstname"},
 		},
+		// Add IF string literal
+		{
+			B: Update("scheduler_task_run").Set("status").Where(w).If(EqLitString("status", "RUNNING")),
+			S: "UPDATE scheduler_task_run SET status=? WHERE id=? IF status='RUNNING' ",
+			N: []string{"status", "expr"},
+		},
 		// Add TTL
 		{
 			B: Update("cycling.cyclist_name").Set("id", "user_uuid", "firstname").Where(w).TTL(time.Second),
@@ -117,7 +129,7 @@ func TestUpdateBuilder(t *testing.T) {
 		},
 		// Add TIMESTAMP
 		{
-			B: Update("cycling.cyclist_name").Set("id", "user_uuid", "firstname").Where(w).Timestamp(time.Date(2005, 05, 05, 0, 0, 0, 0, time.UTC)),
+			B: Update("cycling.cyclist_name").Set("id", "user_uuid", "firstname").Where(w).Timestamp(time.Date(2005, 5, 5, 0, 0, 0, 0, time.UTC)),
 			S: "UPDATE cycling.cyclist_name USING TIMESTAMP 1115251200000000 SET id=?,user_uuid=?,firstname=? WHERE id=? ",
 			N: []string{"id", "user_uuid", "firstname", "expr"},
 		},
@@ -160,6 +172,12 @@ func TestUpdateBuilder(t *testing.T) {
 			B: Update("cycling.cyclist_name").RemoveFunc("timestamp", Now()),
 			S: "UPDATE cycling.cyclist_name SET timestamp=timestamp-now() ",
 			N: nil,
+		},
+		// Add ALLOW FILTERING
+		{
+			B: Update("cycling.cyclist_name").Set("id", "user_uuid", "firstname").Where(w).AllowFiltering(),
+			S: "UPDATE cycling.cyclist_name SET id=?,user_uuid=?,firstname=? WHERE id=? ALLOW FILTERING ",
+			N: []string{"id", "user_uuid", "firstname", "expr"},
 		},
 	}
 

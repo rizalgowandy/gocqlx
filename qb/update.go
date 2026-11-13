@@ -12,7 +12,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/scylladb/gocqlx/v2"
+	"github.com/scylladb/gocqlx/v3"
 )
 
 // assignment specifies an assignment in a set operation.
@@ -31,15 +31,17 @@ func (a assignment) writeCql(cql *bytes.Buffer) (names []string) {
 
 // UpdateBuilder builds CQL UPDATE statements.
 type UpdateBuilder struct {
-	table       string
-	using       using
-	assignments []assignment
-	where       where
-	_if         _if
-	exists      bool
+	table          string
+	assignments    []assignment
+	where          where
+	_if            _if
+	using          using
+	exists         bool
+	allowFiltering bool
 }
 
 // Update returns a new UpdateBuilder with the given table name.
+// See the package documentation for table name quoting rules.
 func Update(table string) *UpdateBuilder {
 	return &UpdateBuilder{
 		table: table,
@@ -51,7 +53,7 @@ func (b *UpdateBuilder) ToCql() (stmt string, names []string) {
 	cql := bytes.Buffer{}
 
 	cql.WriteString("UPDATE ")
-	cql.WriteString(b.table)
+	cql.WriteString(quoteTableName(b.table))
 	cql.WriteByte(' ')
 
 	names = append(names, b.using.writeCql(&cql)...)
@@ -72,6 +74,10 @@ func (b *UpdateBuilder) ToCql() (stmt string, names []string) {
 		cql.WriteString("IF EXISTS ")
 	}
 
+	if b.allowFiltering {
+		cql.WriteString("ALLOW FILTERING ")
+	}
+
 	stmt = cql.String()
 	return
 }
@@ -87,6 +93,7 @@ func (b *UpdateBuilder) QueryContext(ctx context.Context, session gocqlx.Session
 }
 
 // Table sets the table to be updated.
+// See the package documentation for table name quoting rules.
 func (b *UpdateBuilder) Table(table string) *UpdateBuilder {
 	b.table = table
 	return b
@@ -151,9 +158,18 @@ func (b *UpdateBuilder) SetNamed(column, name string) *UpdateBuilder {
 }
 
 // SetLit adds SET column=literal clause to the query.
+// The literal is written verbatim; use SetLitString for string values.
 func (b *UpdateBuilder) SetLit(column, literal string) *UpdateBuilder {
 	b.assignments = append(
 		b.assignments, assignment{column: column, value: lit(literal)})
+	return b
+}
+
+// SetLitString adds SET column='literal' with an escaped CQL string literal.
+// It does not add a parameter to the query.
+func (b *UpdateBuilder) SetLitString(column, literal string) *UpdateBuilder {
+	b.assignments = append(
+		b.assignments, assignment{column: column, value: stringLit(literal)})
 	return b
 }
 
@@ -194,6 +210,12 @@ func (b *UpdateBuilder) AddLit(column, literal string) *UpdateBuilder {
 // AddFunc adds SET column=column+someFunc(?...) clauses to the query.
 func (b *UpdateBuilder) AddFunc(column string, fn *Func) *UpdateBuilder {
 	return b.addValue(column, fn)
+}
+
+// AllowFiltering sets a ALLOW FILTERING clause on the query.
+func (b *UpdateBuilder) AllowFiltering() *UpdateBuilder {
+	b.allowFiltering = true
+	return b
 }
 
 func (b *UpdateBuilder) addValue(column string, value value) *UpdateBuilder {

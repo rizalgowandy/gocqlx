@@ -7,28 +7,77 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+env:
+  # Use Go's default proxy to fetch pinned modules when their origins are unavailable.
+  # Keep direct fallback for modules not served by the proxy.
+  GOPROXY: https://proxy.golang.org,direct
+  # Test the selected toolchain rather than silently upgrading it.
+  GOTOOLCHAIN: local
+  # On CICD following error shows up:
+  #   go: golang.org/x/tools/go/analysis/passes/fieldalignment/cmd/fieldalignment@v0.24.0: golang.org/x/tools@v0.24.0: verifying module: missing GOSUMDB
+  # This env variable makes it go away
+  # If at some point you see no error, feel free to remove it
+  GOSUMDB: off
+
 jobs:
-  build:
-    name: Build
+  test:
+    name: Go ${{ matrix.go }}
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
-    env:
-      SCYLLA_VERSION: 4.2.0
-      GOBIN: ./bin
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - go: minimum
+            go-version: ''
+            go-version-file: go.mod
+            lint: true
+          - go: stable
+            go-version: stable
+            go-version-file: ''
+            lint: false
     steps:
-      - uses: actions/checkout@v2
-      - uses: actions/setup-go@v2
+      - name: Git Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          go-version: '^1.17'
-      - uses: actions/cache@v2
+          fetch-depth: '0'
+
+      - name: Install Go ${{ matrix.go }}
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: ${{ matrix.go-version }}
+          go-version-file: ${{ matrix.go-version-file }}
+
+      - name: Cache Dependencies
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         id: gomod-cache
         with:
           path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('go.mod') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+          key: ${{ runner.os }}-go-${{ hashFiles('go.mod', 'cmd/schemagen/testdata/go.mod', 'examples/basic/go.mod') }}
 
-      - run: mkdir -p ${GOBIN}
-      - run: make get-deps get-tools
-      - run: make check
-      - run: make run-scylla
-      - run: make test
+      - name: Download Dependencies
+        run: git --version && make get-deps
+
+      - name: Install lint tools
+        if: matrix.lint
+        run: make get-tools
+
+      - name: Lint
+        if: matrix.lint
+        run: make check
+          
+      - name: Test
+        run: make test
+
+  build:
+    name: Build
+    permissions: {}
+    if: always()
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all Go versions to pass
+        env:
+          TEST_RESULT: ${{ needs.test.result }}
+        run: test "$TEST_RESULT" = success

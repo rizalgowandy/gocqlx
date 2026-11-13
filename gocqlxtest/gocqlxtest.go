@@ -13,7 +13,8 @@ import (
 	"time"
 
 	"github.com/gocql/gocql"
-	"github.com/scylladb/gocqlx/v2"
+
+	"github.com/scylladb/gocqlx/v3"
 )
 
 var (
@@ -31,8 +32,10 @@ var initOnce sync.Once
 
 // CreateSession creates a new gocqlx session from flags.
 func CreateSession(tb testing.TB) gocqlx.Session {
+	tb.Helper()
+
 	cluster := CreateCluster()
-	return createSessionFromCluster(cluster, tb)
+	return CreateSessionFromCluster(tb, cluster)
 }
 
 // CreateCluster creates gocql ClusterConfig from flags.
@@ -48,6 +51,10 @@ func CreateCluster() *gocql.ClusterConfig {
 	cluster.Timeout = *flagTimeout
 	cluster.Consistency = gocql.Quorum
 	cluster.MaxWaitSchemaAgreement = 2 * time.Minute // travis might be slow
+	cluster.ReconnectionPolicy = &gocql.ConstantReconnectionPolicy{
+		MaxRetries: 10,
+		Interval:   3 * time.Second,
+	}
 	if *flagRetry > 0 {
 		cluster.RetryPolicy = &gocql.SimpleRetryPolicy{NumRetries: *flagRetry}
 	}
@@ -83,8 +90,8 @@ func CreateKeyspace(cluster *gocql.ClusterConfig, keyspace string) error {
 	}
 
 	{
-		err := session.ExecStmt(fmt.Sprintf(`CREATE KEYSPACE %s WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : %d}`, keyspace, *flagRF))
-		if err != nil {
+		stmt := fmt.Sprintf(`CREATE KEYSPACE %s WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : %d}`, keyspace, *flagRF)
+		if err := execCreateKeyspaceStmt(session, stmt); err != nil {
 			return fmt.Errorf("create keyspace: %w", err)
 		}
 	}
@@ -92,7 +99,33 @@ func CreateKeyspace(cluster *gocql.ClusterConfig, keyspace string) error {
 	return nil
 }
 
-func createSessionFromCluster(cluster *gocql.ClusterConfig, tb testing.TB) gocqlx.Session {
+// CreateKeyspaceIfNotExists creates keyspace with SimpleStrategy and RF derived from flags.
+func CreateKeyspaceIfNotExists(session gocqlx.Session, keyspace string) error {
+	stmt := fmt.Sprintf(`CREATE KEYSPACE IF NOT EXISTS %s WITH replication = {'class' : 'SimpleStrategy', 'replication_factor' : %d}`, keyspace, *flagRF)
+	if err := execCreateKeyspaceStmt(session, stmt); err != nil {
+		return fmt.Errorf("create keyspace: %w", err)
+	}
+	return nil
+}
+
+type execStmtSession interface {
+	ExecStmt(stmt string) error
+}
+
+func execCreateKeyspaceStmt(session execStmtSession, stmt string) error {
+	err := session.ExecStmt(stmt)
+	if err == nil || !strings.Contains(err.Error(), "SimpleStrategy doesn't support tablet replication") {
+		return err
+	}
+
+	stmt = strings.TrimSuffix(strings.TrimSpace(stmt), ";")
+	return session.ExecStmt(stmt + ` AND tablets = {'enabled': false}`)
+}
+
+// CreateSessionFromCluster creates a new gocqlx session from cluster while
+// preserving the shared test keyspace lifecycle.
+func CreateSessionFromCluster(tb testing.TB, cluster *gocql.ClusterConfig) gocqlx.Session {
+	tb.Helper()
 	if !flag.Parsed() {
 		flag.Parse()
 	}
